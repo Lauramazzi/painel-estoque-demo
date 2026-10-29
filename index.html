@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Estoque Omie — Demo</title>
+    
+    <!-- Fontes Baloo 2 e Nunito -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Bibliotecas de CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+    
+    <!-- Estilos Externos -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Header / Barra Superior -->
+    <header class="topbar">
+        <div class="logo-container">
+            <!-- Logo genérico da demo -->
+            <svg class="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 52" aria-hidden="true">
+                <rect x="4" y="18" width="30" height="30" rx="5" style="fill:#0082A0;"></rect>
+                <rect x="38" y="8" width="30" height="40" rx="5" style="fill:#FFCC1B;"></rect>
+                <rect x="72" y="26" width="30" height="22" rx="5" style="fill:#0082A0;opacity:.6"></rect>
+            </svg>
+            <span class="logo-text">Painel Omie <small style="opacity:.7">· demo</small></span>
+        </div>
+        
+        <!-- Abas -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="tab-dashboard">
+                <i data-lucide="layout-dashboard"></i> Dashboard Geral
+            </button>
+            <button class="tab-btn" data-tab="tab-spreadsheet">
+                <i data-lucide="refresh-cw"></i> Alimentador de Planilha
+            </button>
+            <button class="tab-btn" data-tab="tab-batch">
+                <i data-lucide="search"></i> Consulta em Lote
+            </button>
+            <button class="tab-btn" data-tab="tab-config">
+                <i data-lucide="settings"></i> Configurações / API
+            </button>
+        </nav>
+        
+        <!-- Controles da Direita -->
+        <div class="header-actions">
+            <!-- Status do Cache -->
+            <div id="syncStatus" class="status-indicator warning">
+                <span class="indicator-dot"></span>
+                <span class="status-lbl">Modo Demo Ativo</span>
+            </div>
+            <!-- Theme Toggle -->
+            <button id="themeToggle" class="icon-btn" title="Alternar Tema">
+                <i data-lucide="sun"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Container Principal -->
+    <main class="main-container">
+        
+        <!-- BANNER DE SINCRONIZAÇÃO DA API (Exibido quando está atualizando cache na Omie) -->
+        <div id="syncProcessBanner" class="sync-banner hidden">
+            <div class="spinner"></div>
+            <div class="sync-banner-text">
+                <h3>Sincronização Omie em andamento</h3>
+                <p>O servidor está puxando novos saldos do ERP Omie. Esse processo pode demorar até 40 minutos. Os dados mostrados abaixo são a última versão disponível.</p>
+            </div>
+        </div>
+
+        <!-- ================= ABAS DO PAINEL ================= -->
+
+        <!-- ABA 1: DASHBOARD GERAL -->
+        <section id="tab-dashboard" class="tab-content active">
+            
+            <!-- Cards de Métricas / KPIs -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon teal-bg">
+                        <i data-lucide="dollar-sign"></i>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-title">Valor Total em Estoque</span>
+                        <h2 class="kpi-value" id="kpi-total-value">R$ 0,00</h2>
+                    </div>
+                </div>
+                
+                <div class="kpi-card">
+                    <div class="kpi-icon purple-bg">
+                        <i data-lucide="package"></i>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-title">Total de Itens</span>
+                        <h2 class="kpi-value" id="kpi-total-items">0</h2>
+                    </div>
+                </div>
+                
+                <div class="kpi-card">
+                    <div class="kpi-icon blue-bg">
+                        <i data-lucide="layers"></i>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-title">Produtos Únicos (SKUs)</span>
+                        <h2 class="kpi-value" id="kpi-total-skus">0</h2>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-icon orange-bg">
+                        <i data-lucide="calendar"></i>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-title">Última Sincronização</span>
+                        <h2 class="kpi-value" id="kpi-sync-date">--/--/----</h2>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Distribuição por Categoria</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>Estoque por Localização</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="locationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Painel de Filtros e Busca -->
+            <div class="filter-card">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="search-input" placeholder="Buscar por SKU, Nome do Produto, Categoria...">
+                </div>
+                <div class="filter-selects">
+                    <select id="filter-category">
+                        <option value="">Todas as Categorias</option>
+                    </select>
+                    <select id="filter-location">
+                        <option value="">Todos os Depósitos (BOX, SHOP, B2B)</option>
+                        <option value="box">Estoque BOX</option>
+                        <option value="shop">Estoque SHOP</option>
+                        <option value="mercos">Estoque B2B (Mercos)</option>
+                    </select>
+                    <select id="filter-status">
+                        <option value="">Qualquer Saldo</option>
+                        <option value="in-stock">Com Estoque (> 0)</option>
+                        <option value="out-of-stock">Sem Estoque (= 0)</option>
+                        <option value="negative">Estoque Negativo (< 0)</option>
+                        <option value="high-cost">Custo Alto (> R$ 10)</option>
+                    </select>
+                    <button class="btn btn-secondary" id="btn-clear-filters">
+                        <i data-lucide="rotate-ccw"></i> Limpar
+                    </button>
+                    <button class="btn btn-primary" id="btn-export-csv">
+                        <i data-lucide="download"></i> Exportar CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela de Dados -->
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="sku">SKU <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="nome">Nome <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="categoria">Categoria <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="box">Estoque BOX <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="shop">Estoque SHOP <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="mercos">Estoque B2B <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="qtd">Estoque Total <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="cmc">CMC <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th data-sort="valor">Valor total <i class="sort-icon" data-lucide="chevrons-up-down"></i></th>
+                                <th style="width: 120px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <!-- Inserido dinamicamente via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Paginação -->
+                <div class="pagination-container">
+                    <div class="page-size-selector">
+                        <label for="page-size-select">Itens por página:</label>
+                        <select id="page-size-select" class="form-control-sm">
+                            <option value="15">15</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="all">Todos</option>
+                        </select>
+                    </div>
+                    <span id="pagination-info">Mostrando 0-0 de 0 produtos</span>
+                    <div class="pagination-buttons">
+                        <button class="btn-page" id="btn-prev-page"><i data-lucide="chevron-left"></i></button>
+                        <span id="page-num">1</span>
+                        <button class="btn-page" id="btn-next-page"><i data-lucide="chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ABA 2: ALIMENTADOR DE PLANILHA -->
+        <section id="tab-spreadsheet" class="tab-content">
+            <div class="card-instruction">
+                <div class="instruction-icon"><i data-lucide="sparkles"></i></div>
+                <div class="instruction-text">
+                    <h3>Assistente de Abastecimento Quinzenal (15 dias)</h3>
+                    <p>Alimente a sua planilha de controle de abastecimento automaticamente. O sistema lê as colunas de SKU da sua planilha, consulta o saldo atualizado de cada localização no ERP Omie e devolve a planilha preenchida com as métricas calculadas.</p>
+                </div>
+            </div>
+
+            <div class="spreadsheet-container-grid">
+                
+                <!-- Coluna de Configuração / Upload -->
+                <div class="column-upload">
+                    
+                    <!-- Bloco de Mapeamento de Localização da Omie -->
+                    <div class="glass-card">
+                        <div class="card-header-icon">
+                            <i data-lucide="map-pin"></i>
+                            <h3>Mapeamento de Depósitos</h3>
+                        </div>
+                        <p class="description">Identifique quais IDs de localização da Omie correspondem às colunas da sua planilha:</p>
+                        
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="map-box">Estoque BOX</label>
+                                <select id="map-box" class="form-control loc-dropdown-mapping">
+                                    <option value="1000000001">1000000001 (BOX Mock)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="map-shop">Estoque SHOP</label>
+                                <select id="map-shop" class="form-control loc-dropdown-mapping">
+                                    <option value="1000000002">1000000002 (SHOP Mock)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="map-mercos">Estoque Mercos (B2B)</label>
+                                <select id="map-mercos" class="form-control loc-dropdown-mapping">
+                                    <option value="1000000003">1000000003 (Mercos Mock)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group margin-top-sm">
+                            <label for="period-days">Dias do Período de Vendas (para Média Dia)</label>
+                            <input type="number" id="period-days" class="form-control width-small" value="26" min="1">
+                        </div>
+                    </div>
+
+                    <!-- Bloco de Upload do Arquivo -->
+                    <div class="glass-card margin-top">
+                        <div class="card-header-icon">
+                            <i data-lucide="file-spreadsheet"></i>
+                            <h3>Importar Planilha de Controle</h3>
+                        </div>
+                        <p class="description">Arraste a planilha de abastecimento atual (.csv) ou selecione o arquivo do computador:</p>
+                        
+                        <div class="dropzone" id="csv-dropzone">
+                            <i data-lucide="cloud-upload" class="upload-icon"></i>
+                            <p>Arraste o arquivo CSV aqui ou <span>clique para navegar</span></p>
+                            <input type="file" id="csv-file-input" accept=".csv, .tsv, .txt" class="hidden">
+                        </div>
+
+                        <div id="csv-file-info" class="file-loaded-info hidden">
+                            <i data-lucide="file-check" class="success-icon"></i>
+                            <div class="file-text">
+                                <strong id="csv-filename">planilha_abastecimento.csv</strong>
+                                <span id="csv-filesize">0 KB</span>
+                            </div>
+                            <button id="btn-remove-csv" class="btn-remove"><i data-lucide="x"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Botão de Processar -->
+                    <button class="btn btn-primary btn-block margin-top" id="btn-process-sheet" disabled>
+                        <i data-lucide="play"></i> Alimentar e Processar Planilha
+                    </button>
+                </div>
+
+                <!-- Coluna de Resultados / Download -->
+                <div class="column-results">
+                    <div class="glass-card height-full">
+                        <div class="card-header-icon">
+                            <i data-lucide="check-circle2"></i>
+                            <h3>Resultado do Processamento</h3>
+                        </div>
+                        
+                        <!-- Estado Vazio -->
+                        <div id="results-empty" class="state-empty">
+                            <i data-lucide="clock"></i>
+                            <p>Aguardando importação e processamento da planilha de controle.</p>
+                        </div>
+
+                        <!-- Estado Carregado -->
+                        <div id="results-loaded" class="state-loaded hidden">
+                            <div class="stats-summary">
+                                <div class="stat-bubble">
+                                    <span class="label">SKUs Atualizados</span>
+                                    <strong id="res-updated-count">0</strong>
+                                </div>
+                                <div class="stat-bubble">
+                                    <span class="label">SKUs não encontrados</span>
+                                    <strong id="res-missing-count" class="danger-text">0</strong>
+                                </div>
+                                <div class="stat-bubble">
+                                    <span class="label">Total em Estoque</span>
+                                    <strong id="res-total-stock">0</strong>
+                                </div>
+                            </div>
+
+                            <div class="results-preview-section">
+                                <h4>Visualização Rápida dos Lançamentos:</h4>
+                                <div class="table-responsive small-table">
+                                    <table class="data-table preview-table">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU</th>
+                                                <th>Produto</th>
+                                                <th>BOX (Antigo → Omie)</th>
+                                                <th>SHOP (Antigo → Omie)</th>
+                                                <th>Mercos (Antigo → Omie)</th>
+                                                <th>Total (Antigo → Omie)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="preview-sheet-body">
+                                            <!-- Preenchido via JS -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="download-section">
+                                <button class="btn btn-primary btn-block btn-lg" id="btn-download-csv">
+                                    <i data-lucide="file-down"></i> Baixar Planilha Atualizada (.CSV)
+                                </button>
+                                <p class="help-text">O arquivo gerado é compatível com o Excel, utilizando codificação UTF-8, separador ponto e vírgula (;) e vírgula para decimais.</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ABA 3: CONFIGURAÇÕES / API -->
+        <section id="tab-config" class="tab-content">
+            <div class="config-grid">
+                
+                <!-- Card de Configuração de Autenticação -->
+                <div class="glass-card">
+                    <div class="card-header-icon">
+                        <i data-lucide="lock"></i>
+                        <h3>Credenciais de Integração</h3>
+                    </div>
+                    <p class="description">Configure o endpoint e as credenciais para puxar o estoque da Omie automaticamente em tempo real.</p>
+                    
+                    <form id="api-config-form">
+                        <div class="form-group">
+                            <label for="endpoint-login">Endpoint de Login</label>
+                            <input type="url" id="endpoint-login" class="form-control" value="https://sua-api.exemplo.com/api/login" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="endpoint-estoque">Endpoint de Estoque JSON</label>
+                            <input type="url" id="endpoint-estoque" class="form-control" value="https://sua-api.exemplo.com/api/omie/estoque-json" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="api-email">E-mail de Acesso</label>
+                            <input type="email" id="api-email" class="form-control" placeholder="usuario@empresa.com.br" value="">
+                        </div>
+                        <div class="form-group">
+                            <label for="api-password">Senha</label>
+                            <input type="password" id="api-password" class="form-control" placeholder="••••••••" value="">
+                        </div>
+                        
+                        <div class="btn-group-row">
+                            <button type="submit" class="btn btn-primary" id="btn-save-credentials">
+                                <i data-lucide="save"></i> Salvar Credenciais
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="btn-connect-api">
+                                <i data-lucide="link"></i> Conectar e Sincronizar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Card de Importação Manual de Arquivo Omie JSON -->
+                <div class="glass-card">
+                    <div class="card-header-icon">
+                        <i data-lucide="upload"></i>
+                        <h3>Importar JSON da Omie Manualmente</h3>
+                    </div>
+                    <p class="description">Se você possuir o arquivo JSON exportado diretamente do endpoint `/api/omie/estoque-json`, poderá carregá-lo aqui. É seguro e contorna restrições de rede ou CORS do navegador.</p>
+                    
+                    <div class="dropzone" id="json-dropzone">
+                        <i data-lucide="file-json" class="upload-icon"></i>
+                        <p>Arraste o arquivo JSON da Omie aqui ou <span>clique para navegar</span></p>
+                        <input type="file" id="json-file-input" accept=".json" class="hidden">
+                    </div>
+
+                    <div id="json-file-info" class="file-loaded-info hidden">
+                        <i data-lucide="file-code" class="success-icon"></i>
+                        <div class="file-text">
+                            <strong id="json-filename">estoque.json</strong>
+                            <span id="json-filesize">0 KB</span>
+                        </div>
+                        <button id="btn-remove-json" class="btn-remove"><i data-lucide="x"></i></button>
+                    </div>
+
+                    <button class="btn btn-secondary btn-block margin-top" id="btn-toggle-demo">
+                        <i data-lucide="play-circle"></i> Alternar para Modo Demo (Usar dados mock)
+                    </button>
+            </div>
+        </section>
+
+        <!-- ================= ABA: CONSULTA EM LOTE ================= -->
+        <section id="tab-batch" class="tab-content">
+            <div class="glass-card" style="margin-bottom: 24px;">
+                <div class="card-header-icon">
+                    <i data-lucide="search"></i>
+                    <h3>Consulta de SKUs em Lote</h3>
+                </div>
+                <p class="description">Cole uma lista de SKUs abaixo (um por linha) para ver a quantidade disponível de cada um deles dividida por canal (BOX, SHOP, B2B) e o total acumulado.</p>
+                
+                <div class="margin-top">
+                    <textarea id="batch-skus-input" class="form-control" rows="8" placeholder="Cole aqui seus SKUs, por exemplo:&#10;DEMO-001&#10;DEMO-002&#10;DEMO-003" style="width:100%; font-family:monospace; resize:vertical; min-height:150px; padding:12px; margin-bottom:16px;"></textarea>
+                    
+                    <div class="btn-group-row">
+                        <button class="btn btn-primary" id="btn-batch-search">
+                            <i data-lucide="play"></i> Buscar SKUs
+                        </button>
+                        <button class="btn btn-secondary" id="btn-batch-clear">
+                            <i data-lucide="rotate-ccw"></i> Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Área de Resultados do Lote (Inicialmente Oculta) -->
+            <div id="batch-results-container" class="hidden">
+                <!-- KPIs do Resultado do Lote -->
+                <div class="kpis-grid" style="margin-bottom:24px;">
+                    <div class="kpi-card">
+                        <div class="kpi-icon blue-bg"><i data-lucide="list"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">SKUs Pesquisados</span>
+                            <h2 class="kpi-value" id="kpi-batch-total">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon green-bg"><i data-lucide="check-circle-2"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Encontrados</span>
+                            <h2 class="kpi-value" id="kpi-batch-found">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon red-bg"><i data-lucide="x-circle"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Não Encontrados</span>
+                            <h2 class="kpi-value" id="kpi-batch-notfound">0</h2>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="kpis-grid" style="margin-bottom:24px;">
+                    <div class="kpi-card">
+                        <div class="kpi-icon teal-bg"><i data-lucide="archive"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Total BOX</span>
+                            <h2 class="kpi-value" id="kpi-batch-box">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon teal-bg"><i data-lucide="shopping-bag"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Total SHOP</span>
+                            <h2 class="kpi-value" id="kpi-batch-shop">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon teal-bg"><i data-lucide="briefcase"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Total B2B (Mercos)</span>
+                            <h2 class="kpi-value" id="kpi-batch-mercos">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card text-highlight-primary">
+                        <div class="kpi-icon teal-bg"><i data-lucide="package-check"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Saldo Total Geral</span>
+                            <h2 class="kpi-value" id="kpi-batch-total-qty">0</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Resultados -->
+                <div class="table-card">
+                    <div style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color);">
+                        <h4 style="margin:0; font-size:16px;">Saldos Encontrados</h4>
+                        <button class="btn btn-secondary btn-sm" id="btn-batch-export">
+                            <i data-lucide="download"></i> Exportar Resultados (CSV)
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Nome do Produto</th>
+                                    <th style="text-align: right;">Estoque BOX</th>
+                                    <th style="text-align: right;">Estoque SHOP</th>
+                                    <th style="text-align: right;">Estoque B2B</th>
+                                    <th style="text-align: right;">Estoque Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="batch-table-body">
+                                <!-- Lançado via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Lista de SKUs Não Encontrados -->
+                <div class="glass-card hidden" id="batch-notfound-card" style="border-left: 4px solid var(--state-error); margin-bottom:24px;">
+                    <h4 style="color:var(--state-error); margin-bottom:10px;"><i data-lucide="alert-triangle" style="vertical-align:middle; margin-right:6px;"></i> SKUs Não Encontrados na Base Omie</h4>
+                    <p class="description" style="margin-bottom:12px;">Os SKUs abaixo foram digitados na busca mas não possuem registros correspondentes no estoque atualizado da Omie:</p>
+                    <div id="batch-notfound-list" style="font-family:monospace; background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; max-height:150px; overflow-y:auto; line-height:1.6; word-break:break-all;">
+                        <!-- Inserido dinamicamente -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODAL: DETALHES DO PRODUTO ================= -->
+    <div id="detail-drawer" class="drawer">
+        <div class="drawer-overlay"></div>
+        <div class="drawer-content">
+            <div class="drawer-header">
+                <h2 id="detail-product-name" class="baloo-font">Nome do Produto</h2>
+                <button class="drawer-close" id="btn-close-drawer">&times;</button>
+            </div>
+            
+            <div class="drawer-body">
+                <div class="detail-kpi-grid">
+                    <div class="detail-kpi">
+                        <span class="lbl">SKU</span>
+                        <strong id="detail-sku" class="val">SKU0000</strong>
+                    </div>
+                    <div class="detail-kpi">
+                        <span class="lbl">Categoria</span>
+                        <strong id="detail-category" class="val">Categoria</strong>
+                    </div>
+                    <div class="detail-kpi">
+                        <span class="lbl">Custo Médio (CMC)</span>
+                        <strong id="detail-cmc" class="val">R$ 0,00</strong>
+                    </div>
+                    <div class="detail-kpi">
+                        <span class="lbl">Valor em Estoque</span>
+                        <strong id="detail-total-value" class="val teal-text">R$ 0,00</strong>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Saldos Detalhados por Localização</h3>
+                    <div class="table-responsive">
+                        <table class="detail-table">
+                            <thead>
+                                <tr>
+                                    <th>Cód. Localização</th>
+                                    <th>Identificação</th>
+                                    <th style="text-align: right;">Quantidade em Estoque</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-locations-list">
+                                <!-- Preenchido dinamicamente -->
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="2">Total Geral</th>
+                                    <th id="detail-total-qty" style="text-align: right;">0</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Gráfico Rápido de Locações -->
+                <div class="detail-section">
+                    <h3>Proporção por Depósito</h3>
+                    <div class="detail-chart-wrapper">
+                        <canvas id="detailChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts da Aplicação -->
+    <script src="mockData.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
